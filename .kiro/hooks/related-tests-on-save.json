@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Run related tests on save",
+      "description": "Hook (b): when a file under revenant-core/src or revenant-core/tests is saved, run its related test file (src/revenant/X.py -> tests/test_X.py; a test file runs itself).",
+      "enabled": true,
+      "trigger": "PostFileSave",
+      "matcher": "revenant-core[\\\\/](src|tests)[\\\\/].*\\.py$",
+      "timeout": 300,
+      "action": {
+        "type": "command",
+        "command": "python .kiro/hooks/scripts/revenant_checks.py related"
+      }
+    }
+  ]
+}

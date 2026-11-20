@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Lint and type-check src on save",
+      "description": "Hook (a): when a file under revenant-core/src is saved, run ruff check and mypy --strict on src and report failures.",
+      "enabled": true,
+      "trigger": "PostFileSave",
+      "matcher": "revenant-core[\\\\/]src[\\\\/].*\\.py$",
+      "timeout": 180,
+      "action": {
+        "type": "command",
+        "command": "python .kiro/hooks/scripts/revenant_checks.py lint"
+      }
+    }
+  ]
+}

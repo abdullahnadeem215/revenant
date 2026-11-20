@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Run replay invariant tests",
+      "description": "Hook (c): when recorder.py or replay.py is saved, run tests/test_invariants.py (zero real calls during replay, divergence detection) and warn if any fail.",
+      "enabled": true,
+      "trigger": "PostFileSave",
+      "matcher": "revenant-core[\\\\/]src[\\\\/]revenant[\\\\/](recorder|replay)\\.py$",
+      "timeout": 300,
+      "action": {
+        "type": "command",
+        "command": "python .kiro/hooks/scripts/revenant_checks.py invariants"
+      }
+    }
+  ]
+}
