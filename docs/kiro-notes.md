@@ -4,6 +4,8 @@ Real findings from building Revenant with Kiro. Each entry is dated by phase.
 
 ## Phase 1: events and errors
 
+- Commit: Phase 1 and Phase 2 share commit e0b2f2a. Phase 1 was never committed on its own,
+  so its files went into the Phase 2 commit.
 - Setup: system Python is 3.12.5. The project requires 3.11+, so 3.12 is used locally.
 - pytest-asyncio 1.x warns when `asyncio_default_fixture_loop_scope` is unset. With
   `filterwarnings = ["error"]` that warning becomes an internal error, so the option is set

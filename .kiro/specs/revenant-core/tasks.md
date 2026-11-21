@@ -68,27 +68,27 @@ Test numbers below follow `requirements.md` (Required tests 1-12).
 
 ## Phase 3: recorder (record mode)
 
-- [ ] 3. Implement record mode in `recorder.py`
-- [ ] 3.1 Implement the recorder core
+- [x] 3. Implement record mode in `recorder.py`
+- [x] 3.1 Implement the recorder core
   - `Recorder.record(store, session_id=None, metadata=None, redactor=default_redactor)` and an internal `_append(type, payload, parent_step)` that redacts, serializes and builds the hashed event
   - A redactor that raises is wrapped in a `RevenantError`, and nothing is appended
   - _Requirements: 3.1, 3.3, 3.7, 3.11_
-- [ ] 3.2 Implement `wrap_llm` and `wrap_tool` for record mode
+- [x] 3.2 Implement `wrap_llm` and `wrap_tool` for record mode
   - Sync and async overloads with `ParamSpec` and `functools.wraps`. `inspect.iscoroutinefunction` chooses the wrapper.
   - Bind, redact, fingerprint, write the call event, call the real function, then write `tool_result` or `error` with `parent_step`
   - Re-raise the original exception. Store `exc_type` as `module.qualname`, with `message` and `args`.
   - _Requirements: 3.2, 3.3, 3.4, 3.9_
-- [ ] 3.3 Implement `now()`, `uuid4()`, `random()`, `final_answer()`, the `_active` guard, `close()` and the context manager
+- [x] 3.3 Implement `now()`, `uuid4()`, `random()`, `final_answer()`, the `_active` guard, `close()` and the context manager
   - Each of the first four writes one event. The guard raises `ConcurrentCallError` on overlap or nesting.
   - _Requirements: 3.6, 3.10, 3.12_
-- [ ] 3.4 Write tests for record mode
+- [x] 3.4 Write tests for record mode
   - Fixtures in `conftest.py`: `ScriptedLLM` (canned responses by call index, with a counter), tools `add` (sync), `lookup` (async) and `fail` (raises `ValueError`), each with a counter. The `driver` fixture runs a fixed call sequence and is not an agent.
   - Event sequence and `parent_step` match design section 3, and the chain verifies
   - Wrapped functions keep `__name__`, `__doc__`, `inspect.signature`, and their sync/async kind
   - Secrets in args are stored as `[REDACTED]`. A non-JSON result raises `PayloadSerializationError` and adds no event. A raising redactor stores nothing.
   - `asyncio.gather` on two wrapped calls raises `ConcurrentCallError`
   - _Requirements: 3.2-3.4, 3.7-3.12_
-- [ ] 3.5 Checkpoint: run pytest, mypy --strict, ruff, and Hypothesis 20 times. Show output and stop.
+- [x] 3.5 Checkpoint: run pytest, mypy --strict, ruff, and Hypothesis 20 times. Show output and stop.
 
 ## Phase 4: replay
 

@@ -21,6 +21,7 @@ from revenant.events import (
     default_redactor,
     request_fingerprint,
 )
+from revenant.recorder import Recorder
 from revenant.store import SessionInfo, SQLiteTraceStore, TraceStore
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "InvalidForkPointError",
     "JSONValue",
     "PayloadSerializationError",
+    "Recorder",
     "Redactor",
     "ReplayExhaustedError",
     "RevenantError",
