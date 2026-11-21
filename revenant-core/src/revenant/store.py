@@ -121,6 +121,7 @@ class SQLiteTraceStore:
             self._conn.execute(ddl)
 
     def close(self) -> None:
+        # Releases this connection only. Stored events are never modified here.
         self._conn.close()
 
     def create_session(

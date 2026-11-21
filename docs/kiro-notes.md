@@ -64,3 +64,35 @@ Real findings from building Revenant with Kiro. Each entry is dated by phase.
 - A hash chain cannot detect truncation of the last events, or moving the last event into
   another session. Changing `session_id` on a middle row is detected. These limits go in the
   README and in `design.md` section 10.
+
+## Phase 3: recorder (record mode)
+
+### The 100-line piece rule was not kept
+
+- The rule was to write source files in pieces of about 100 lines or fewer, and check the line
+  count after each piece. It was not kept.
+- The first write of `recorder.py` was 149 lines. The file now measures 292 lines.
+- One edit to `tests/test_recorder.py` added about 190 lines in a single step.
+- Next time, split any piece over 100 lines before writing it, and check the count afterwards.
+
+### Decisions made after the Phase 3 review
+
+- A call is recorded only after the real function returns, as a call event followed by its
+  result or error. A call that never completes leaves nothing in the store. This covers
+  `BaseException`, such as `KeyboardInterrupt` and cancellation.
+- A non-JSON result stores neither the call nor the result. The recorder then refuses further
+  calls, because the call did happen.
+- Exception messages and args go through the redactor. The default redactor masks
+  `key=value`, `key: value`, JSON-style and `Bearer <token>` secrets in strings. Other forms
+  are not caught.
+
+### Hook verification (confirmed)
+
+- Kiro ran both `lint` and `related` after a plain edit to `store.py`. Both are `PostFileSave`
+  hooks, and a store edit matches both. `lint` exited 0. `related` ran `tests/test_store.py`
+  and exited 0.
+- The `{{filePath}}` placeholder in the hook command was **not** substituted. The helper
+  received the literal text. The fix reads the `file_path` key from the stdin JSON Kiro sends.
+  Its other keys are `cwd`, `hook_event_name` and `session_id`.
+- Each hook run appends to `%TEMP%\revenant_hooks.log`. The log holds action names, resolved
+  paths and stdin key names only, never values.

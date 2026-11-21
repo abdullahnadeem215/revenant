@@ -2,8 +2,9 @@
 
 Phase 3 implements record mode only. Replay and fork come in later phases.
 
-Each successful wrapped call writes a call event followed by a tool_result event whose
-parent_step points at the call. A call that raises writes an error event instead.
+A call is written only after the real function returns: first the call event, then a
+tool_result event (or an error event if the function raised) whose parent_step points at
+the call. A call that never completes leaves nothing in the store.
 """
 
 from __future__ import annotations
@@ -134,7 +135,7 @@ class Recorder:
         if self._closed:
             raise RevenantError("recorder is closed")
         if self._broken is not None:
-            raise RevenantError(f"recorder is unusable after a failed write: {self._broken}")
+            raise RevenantError(f"recorder is unusable: {self._broken}")
 
     @contextmanager
     def _slot(self, name: str) -> Iterator[None]:
@@ -148,40 +149,53 @@ class Recorder:
         finally:
             self._active = None
 
-    def _write_call(self, call_type: EventType, name: str, arguments: dict[str, JSONValue]) -> int:
-        """Write the call event. Redaction and serialization happen before anything is stored."""
-        cleaned = _prepare(self._redactor, arguments)
+    def _write_call(self, call_type: EventType, name: str, args: JSONValue) -> int:
+        """Write the call event for a finished call. args are already redacted and validated."""
         payload: dict[str, JSONValue] = {
             "name": name,
-            "args": cleaned,
-            "fingerprint": request_fingerprint(name, cleaned),
+            "args": args,
+            "fingerprint": request_fingerprint(name, args),
         }
         return self._write(call_type, payload, None)
 
-    def _record_answer(self, call_step: int, name: str, result: object) -> None:
-        """Write tool_result for a call that returned. Any failure leaves the recorder unusable."""
+    def _record_success(
+        self, call_type: EventType, name: str, args: JSONValue, result: object
+    ) -> None:
+        """Write the call and its tool_result after the real function returned.
+
+        The result is prepared before the first write, so a result that is not JSON stores
+        nothing for this call. The call still happened, so the recorder then refuses further
+        calls instead of recording a gap.
+        """
         try:
-            payload: dict[str, JSONValue] = {
-                "name": name,
-                "result": _prepare(self._redactor, result),
-            }
-            self._write(EventType.TOOL_RESULT, payload, call_step)
+            payload = _prepare(self._redactor, result)
+            call_step = self._write_call(call_type, name, args)
+            self._write(EventType.TOOL_RESULT, {"name": name, "result": payload}, call_step)
         except BaseException as exc:
-            self._broken = f"result of {name!r} was not recorded ({type(exc).__name__})"
+            self._broken = f"call {name!r} completed but was not recorded ({type(exc).__name__})"
             raise
 
-    def _record_error(self, call_step: int, name: str, exc: Exception) -> None:
-        """Write error for a call that raised. Any failure leaves the recorder unusable."""
+    def _record_failure(
+        self, call_type: EventType, name: str, args: JSONValue, exc: Exception
+    ) -> None:
+        """Write the call and its error after the real function raised.
+
+        The exception text and args go through the redactor. Same failure rule as
+        _record_success.
+        """
         try:
-            payload: dict[str, JSONValue] = {
+            error: dict[str, JSONValue] = {
                 "name": name,
                 "exc_type": f"{type(exc).__module__}.{type(exc).__qualname__}",
-                "message": str(exc),
+                "message": _prepare(self._redactor, str(exc)),
                 "args": _prepare(self._redactor, list(exc.args)),
             }
-            self._write(EventType.ERROR, payload, call_step)
+            call_step = self._write_call(call_type, name, args)
+            self._write(EventType.ERROR, error, call_step)
         except BaseException as err:
-            self._broken = f"error of {name!r} was not recorded ({type(err).__name__})"
+            self._broken = (
+                f"call {name!r} raised but its error was not recorded ({type(err).__name__})"
+            )
             raise
 
     def _wrap(
@@ -195,17 +209,13 @@ class Recorder:
             @functools.wraps(fn)
             async def async_wrapper(*args: object, **kwargs: object) -> object:
                 with self._slot(call_name):
-                    arguments = _bind_arguments(signature, args, kwargs)
-                    call_step = self._write_call(call_type, call_name, arguments)
+                    args_json = _prepare(self._redactor, _bind_arguments(signature, args, kwargs))
                     try:
                         result = await fn(*args, **kwargs)
                     except Exception as exc:
-                        self._record_error(call_step, call_name, exc)
+                        self._record_failure(call_type, call_name, args_json, exc)
                         raise
-                    except BaseException:
-                        self._broken = f"call {call_name!r} was interrupted before it returned"
-                        raise
-                    self._record_answer(call_step, call_name, result)
+                    self._record_success(call_type, call_name, args_json, result)
                     return result
 
             return async_wrapper
@@ -213,17 +223,13 @@ class Recorder:
         @functools.wraps(fn)
         def sync_wrapper(*args: object, **kwargs: object) -> object:
             with self._slot(call_name):
-                arguments = _bind_arguments(signature, args, kwargs)
-                call_step = self._write_call(call_type, call_name, arguments)
+                args_json = _prepare(self._redactor, _bind_arguments(signature, args, kwargs))
                 try:
                     result = fn(*args, **kwargs)
                 except Exception as exc:
-                    self._record_error(call_step, call_name, exc)
+                    self._record_failure(call_type, call_name, args_json, exc)
                     raise
-                except BaseException:
-                    self._broken = f"call {call_name!r} was interrupted before it returned"
-                    raise
-                self._record_answer(call_step, call_name, result)
+                self._record_success(call_type, call_name, args_json, result)
                 return result
 
         return sync_wrapper

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -38,6 +39,7 @@ __all__ = [
     "canonical_json",
     "compute_hash",
     "default_redactor",
+    "redact_text",
     "request_fingerprint",
     "to_json_value",
     "utc_timestamp",
@@ -139,8 +141,33 @@ def utc_timestamp() -> str:
     return datetime.now(UTC).isoformat()
 
 
+_BEARER_TOKEN = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+")
+_KEY_VALUE_SECRET = re.compile(
+    r"(?i)\b(api[_-]?key|password|passwd|token|secret|authorization|cookie|private[_-]key)"
+    r"(\"?\s*[:=]\s*)(\"?)[^\s\"',;&]+"
+)
+
+
+def redact_text(text: str) -> str:
+    """Mask secrets inside free text, such as exception messages.
+
+    Detected forms: `key=value`, `key: value`, `"key": "value"` for the SENSITIVE_KEYS
+    names (without bearer), and `Bearer <token>`. Any other way of writing a secret
+    is not detected.
+    """
+    masked = _BEARER_TOKEN.sub(f"Bearer {REDACTED}", text)
+    return _KEY_VALUE_SECRET.sub(
+        lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}{REDACTED}", masked
+    )
+
+
 def default_redactor(value: JSONValue) -> JSONValue:
-    """Mask values of SENSITIVE_KEYS (case-insensitive) at any depth. Returns a new object."""
+    """Mask SENSITIVE_KEYS values at any depth (case-insensitive) and secrets in strings.
+
+    Returns a new object and never mutates the input.
+    """
+    if isinstance(value, str):
+        return redact_text(value)
     if isinstance(value, dict):
         return {
             key: REDACTED

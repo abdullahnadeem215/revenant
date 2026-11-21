@@ -19,6 +19,7 @@ from revenant.events import (
     canonical_json,
     compute_hash,
     default_redactor,
+    redact_text,
     request_fingerprint,
 )
 
@@ -246,3 +247,25 @@ def test_default_redactor_output_has_no_sensitive_values(value: JSONValue) -> No
                 check(item)
 
     check(default_redactor(value))
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("login failed: password=hunter2", "login failed: password=[REDACTED]"),
+        ("token: abc123 expired", "token: [REDACTED] expired"),
+        ('{"api_key": "sk-1"}', '{"api_key": "[REDACTED]"}'),
+        ("Authorization: Bearer abc.def", "Authorization: [REDACTED] [REDACTED]"),
+        ("auth: Bearer abc.def", "auth: Bearer [REDACTED]"),
+        ("passwordless=yes", "passwordless=yes"),
+        ("plain text with no secrets", "plain text with no secrets"),
+    ],
+)
+def test_redact_text_masks_known_forms(text: str, expected: str) -> None:
+    assert redact_text(text) == expected
+
+
+@given(st.text(max_size=60))
+def test_redact_text_is_idempotent(text: str) -> None:
+    once = redact_text(text)
+    assert redact_text(once) == once

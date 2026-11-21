@@ -141,9 +141,7 @@ def add_still_works(rec: Recorder, tools: RealTools) -> bool:
     return rec.wrap_tool(tools.add)(10, 1) == 11
 
 
-def test_non_json_result_leaves_call_unanswered_and_breaks_recorder(
-    store: SQLiteTraceStore,
-) -> None:
+def test_non_json_result_leaves_no_event_for_that_call(store: SQLiteTraceStore) -> None:
     def pair() -> tuple[int, int]:
         return (1, 2)
 
@@ -151,7 +149,7 @@ def test_non_json_result_leaves_call_unanswered_and_breaks_recorder(
     with pytest.raises(PayloadSerializationError):
         rec.wrap_tool(pair)()
     events = session_events(store, "s1")
-    assert [e.type for e in events] == [EventType.SESSION_START, EventType.TOOL_CALL]
+    assert [e.type for e in events] == [EventType.SESSION_START]  # no call, no result
     assert store.verify_chain("s1")  # nothing lossy was stored
     with pytest.raises(RevenantError, match="unusable"):
         rec.wrap_tool(pair)()
@@ -236,7 +234,7 @@ class Interrupted(BaseException):
     """Stands in for KeyboardInterrupt or task cancellation."""
 
 
-def test_interrupted_call_leaves_recorder_unusable(
+def test_interrupted_call_leaves_no_event_and_recorder_usable(
     tools: RealTools, store: SQLiteTraceStore
 ) -> None:
     def cancel() -> None:
@@ -245,13 +243,25 @@ def test_interrupted_call_leaves_recorder_unusable(
     rec = Recorder.record(store, session_id="s1")
     with pytest.raises(Interrupted):
         rec.wrap_tool(cancel)()
-    assert [e.type for e in session_events(store, "s1")] == [
-        EventType.SESSION_START,
-        EventType.TOOL_CALL,
-    ]
-    with pytest.raises(RevenantError, match="unusable"):
-        rec.wrap_tool(tools.add)(1, 2)
-    assert tools.add_calls == 0
+    assert [e.type for e in session_events(store, "s1")] == [EventType.SESSION_START]
+    assert rec.wrap_tool(tools.add)(1, 2) == 3  # the recorder still works
+    assert tools.add_calls == 1
+    assert store.verify_chain("s1")
+
+
+def test_secret_inside_exception_text_is_masked(store: SQLiteTraceStore) -> None:
+    def leak() -> None:
+        raise ValueError("login failed: password=hunter2-secret, auth: Bearer abc.def")
+
+    rec = Recorder.record(store, session_id="s1")
+    with pytest.raises(ValueError, match="hunter2-secret"):
+        rec.wrap_tool(leak)()  # the caller still gets the original exception
+    error = session_events(store, "s1")[2]
+    assert error.type is EventType.ERROR
+    assert error.payload["message"] == "login failed: password=[REDACTED], auth: Bearer [REDACTED]"
+    stored = canonical_json([e.payload for e in session_events(store, "s1")])
+    assert "hunter2-secret" not in stored
+    assert "abc.def" not in stored
 
 
 def test_nondeterminism_values_are_recorded_and_returned(store: SQLiteTraceStore) -> None:

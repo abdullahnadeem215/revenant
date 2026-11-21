@@ -114,7 +114,9 @@ One successful wrapped call (`wrap_llm` or `wrap_tool`) writes exactly two event
 | `n` | `llm_call` or `tool_call` | `{name, args, fingerprint}` | `null` |
 | `n+1` | `tool_result` | `{name, result}` | `n` |
 
-If the real function raises, the second event is an `error` instead of `tool_result`, with the same `parent_step = n`. The call event is written before the real function runs, so a crash mid-call leaves a call with no answer. Replay treats that as `ReplayExhaustedError` when it asks for the answer.
+If the real function raises, the second event is an `error` instead of `tool_result`, with the same `parent_step = n`.
+
+Both events are written only after the real function returns or raises. A call that never completes leaves nothing in the store. This covers a crash, a `BaseException` such as `KeyboardInterrupt`, and task cancellation. A stored recording therefore never contains a call without its answer. A result that is not plain JSON also leaves nothing for its call, and the recorder then refuses further calls, because the call did happen (decision made after Phase 3 review).
 
 `recorder.now()`, `uuid4()`, `random()` write one `nondeterminism` event. `recorder.final_answer(value)` writes one `final_answer` event. None of these may run while a wrapped call is in progress (section 8), so the pair `n, n+1` is always adjacent.
 
@@ -217,11 +219,11 @@ For every call the recorder runs these steps in this order, in record, replay an
 
 1. **Bind** the call arguments to a `dict[str, JSONValue]` with `inspect.signature(fn).bind(*args, **kwargs)` and `apply_defaults()`.
 2. **Redact**: `args = redactor(args)`. If the hook raises, wrap the exception in `RevenantError` and stop. Nothing is stored.
-3. **Serialize**: `canonical_json(args)`. A non-JSON value raises `PayloadSerializationError` and nothing is stored.
+3. **Serialize**: `to_json_value(args)`. A non-JSON value raises `PayloadSerializationError` before the real function runs, so nothing is stored and the function is not called.
 4. **Fingerprint**: `request_fingerprint(name, args)` on the redacted args.
-5. **Persist** (record and the live phase of a fork) or **match** (replay and the fork prefix).
+5. **Persist** (record and the live phase of a fork), or **match** (replay and the fork prefix). In record mode, persist happens only after the real function returns.
 
-Results and error payloads go through redact, serialize, persist in the same order.
+Results and error payloads go through redact, then serialize, then persist, after the call returns. Exception messages and args go through the same redactor. The default redactor also masks secrets in free text, for `key=value`, `key: value`, JSON-style `"key": "value"` and `Bearer <token>` forms (`redact_text`).
 
 The order matters for three reasons:
 - Redacting before persisting means secrets never reach the store, logs or hashes.
@@ -378,12 +380,12 @@ Every failure raises a typed `RevenantError` subclass, and nothing continues sil
 |---|---|---|
 | Unwrapped nondeterminism (`time.time`, `uuid`, `random`, env vars, file reads, network called directly) | Replay can differ from the recording with no error, because the core never sees the call | Use `recorder.now/uuid4/random`. Anything else goes through `wrap_tool`. Documented in README. The core cannot detect sources it does not wrap. |
 | Real side effects | Replay skips real functions, so writes and sends are not repeated. The live phase of a fork does run real functions from `at_step` on. | Replay never calls real functions (invariant tests, hook c). README warns about fork side effects. Idempotency is the caller's job. |
-| Non-serializable results | A tool returning a dataclass, tuple, bytes, `datetime` or NaN cannot be recorded | `PayloadSerializationError` at record time; nothing lossy is stored. The caller converts to JSON inside the wrapped function. |
+| Non-serializable results | A tool returning a dataclass, tuple, bytes, `datetime` or NaN cannot be recorded | `PayloadSerializationError`. Neither the call nor its result is stored, and the recorder refuses further calls. The caller converts to JSON inside the wrapped function. |
 | Adapter coverage | Without framework adapters (out of scope), callers wrap functions by hand and can miss some | Small wrapping API. Adding or removing a wrapped call is caught as divergence. Adapters are a later layer. |
 | Replay returns plain JSON | A function annotated `-> SomeModel` returns a `dict` on replay, which mypy cannot see | Stated in README and docstrings. Non-JSON values are rejected at record time, so callers must already return JSON. |
 | Sequential calls only | `asyncio.gather` and threads over one recorder are unsupported | `ConcurrentCallError` on overlap. Threads are not detected reliably and are documented as unsupported. |
 | Exception reconstruction | Exceptions with custom `__init__` may not rebuild from `args` | Fail closed with `DivergenceError` (decision B). |
-| Secrets outside known keys | A secret inside free text or under an unlisted key is stored | Users pass a custom redactor. |
+| Secrets outside known keys | A secret under an unlisted key, or in free text written another way, is stored | The default redactor masks secrets in free text only for `key=value`, `key: value`, JSON-style and `Bearer <token>` forms. Other forms are stored. Users pass a custom redactor. |
 | Tail truncation | Deleting or truncating the last events of a session leaves a valid chain, so `verify_chain` is `True`. Moving the last event to another session (changing `session_id`) also leaves a valid chain in the original session. A hash chain cannot detect either. | Accepted for v1. Anchor the head hash somewhere the attacker cannot write, if this matters. Non-last rows are protected (changing `session_id` on a middle row fails `verify_chain`). Documented in the README. |
 | Fork link not hashed | `sessions.parent_session_id/parent_step` can be edited without breaking a chain | Accepted for v1. The chain gives integrity of events, not authentication. |
 

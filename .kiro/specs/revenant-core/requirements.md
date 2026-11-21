@@ -59,9 +59,11 @@ Revenant is a record-and-replay core library for AI agent sessions. It is domain
 8. THE default redaction hook SHALL recursively mask the values of keys `api_key`, `password`, `token`, `secret`, `authorization`, `cookie`, `bearer`, `private_key` with `"[REDACTED]"`. Key matching SHALL be case-insensitive and apply at any nesting depth, including dicts inside lists.
 9. THE `request_fingerprint` SHALL be computed on post-redaction arguments, identically in record and replay.
 10. THE recorder SHALL support sequential wrapped calls only. IF a wrapped call starts while another wrapped call on the same recorder is still in progress, THEN THE recorder SHALL raise `ConcurrentCallError`. This is a documented v1 limitation.
-11. IF a payload cannot be canonically serialized to JSON, THEN THE recorder SHALL raise `PayloadSerializationError` and SHALL NOT store any lossy version.
+11. IF a call's arguments or result cannot be canonically serialized to JSON, THEN THE recorder SHALL raise `PayloadSerializationError`, SHALL NOT store any lossy version, and SHALL store neither the call event nor a result event for that call. A call's events are written only after the real function returns, so a non-JSON result leaves the session with no event for that call. The recorder then refuses further calls, because the call did happen.
 12. THE recorder SHALL provide `close()` and SHALL be usable as a context manager. WHEN `close()` runs in replay or fork mode, THE recorder SHALL perform the unconsumed-events check (R4.5).
 13. THE replay SHALL return plain JSON values (dicts, lists, strings, numbers, booleans, null), not the original object types.
+14. THE recorder SHALL apply the redactor to exception messages and exception args before storing an `error` event. The default redactor SHALL mask secrets in free text written as `key=value`, `key: value`, JSON-style `"key": "value"`, or `Bearer <token>`. The exception the caller receives SHALL keep its original message.
+15. A wrapped call SHALL be recorded only when it completes. A call interrupted by a `BaseException` (such as `KeyboardInterrupt` or task cancellation) SHALL leave no event, and the recorder SHALL remain usable.
 
 ### Requirement 4: Replay
 

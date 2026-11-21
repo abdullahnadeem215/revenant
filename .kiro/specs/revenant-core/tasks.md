@@ -152,6 +152,9 @@ Test numbers below follow `requirements.md` (Required tests 1-12).
 - [ ] 7. Write `revenant-core/README.md`
 - [ ] 7.1 Write the README
   - Known limitations, stated plainly: a hash chain cannot detect truncation of the last events, or moving the last event into another session (changing `session_id` on a middle row is detected). The head hash must be anchored elsewhere if this matters.
+  - Exception text is redacted only by the default hook, and only for the `key=value`, `key: value`, JSON-style and `Bearer <token>` forms. A custom redactor replaces that behavior.
+  - A call is recorded only when it completes. A call interrupted by a `BaseException` leaves no event. A call whose result is not JSON leaves no event, and the recorder then refuses further calls.
+  - Default names are the function's `__qualname__` (for example `RealTools.add`) unless `name=` is given.
   - What Revenant core is, and what "deterministic" means here
   - A record and replay usage example under 20 lines
   - Short sections on fork, diff, redaction, and the limitations from design section 10 (unwrapped nondeterminism, side effects in fork, plain JSON, sequential only)
