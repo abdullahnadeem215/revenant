@@ -5,8 +5,9 @@ Usage: revenant_checks.py lint | related [FILE] | invariants
 related takes the saved file from its second argument (manual use), or else from the
 `file_path` key of the JSON Kiro writes to stdin (the hook). It falls back to searching
 stdin for a revenant-core path.
-Each run is logged to %TEMP%\\revenant_hooks.log. The log holds action names, the resolved
-path and the top-level stdin JSON keys. It never holds stdin values.
+Logging is off unless REVENANT_HOOK_LOG names a file. A log line holds the action, the
+resolved file path and the names of the top-level stdin JSON keys. It never holds stdin
+values.
 """
 
 from __future__ import annotations
@@ -21,12 +22,15 @@ from pathlib import Path
 
 CORE = Path(__file__).resolve().parents[3] / "revenant-core"
 INVARIANT_TESTS = "tests/test_invariants.py"
-LOG = Path(os.environ.get("TEMP", ".")) / "revenant_hooks.log"
 PATH_IN_TEXT = re.compile(r"[^\"\s]*revenant-core[\\/]+(?:src|tests)[^\"\s]*?\.py")
 
 
 def log(message: str) -> None:
-    with LOG.open("a", encoding="utf-8") as handle:
+    """Append one line to the file named by REVENANT_HOOK_LOG. Off unless that variable is set."""
+    target = os.environ.get("REVENANT_HOOK_LOG", "")
+    if not target:
+        return
+    with Path(target).open("a", encoding="utf-8") as handle:
         handle.write(f"{datetime.now().isoformat(timespec='seconds')} {message}\n")
 
 

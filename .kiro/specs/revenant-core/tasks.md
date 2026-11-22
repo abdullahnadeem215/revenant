@@ -92,18 +92,18 @@ Test numbers below follow `requirements.md` (Required tests 1-12).
 
 ## Phase 4: replay
 
-- [ ] 4. Implement `replay.py` and replay mode
-- [ ] 4.1 Implement `ReplayCursor`
+- [x] 4. Implement `replay.py` and replay mode
+- [x] 4.1 Implement `ReplayCursor`
   - Built from a `list[Event]`. Provides `take_call`, `take_answer`, `take_nondeterminism`, `take_final_answer` and `remaining`.
   - Raises `DivergenceError` and `ReplayExhaustedError` as in the design section 4 table. The cursor does not advance on error.
   - _Requirements: 4.1, 4.3, 4.4_
-- [ ] 4.2 Implement `Recorder.replay`
+- [x] 4.2 Implement `Recorder.replay`
   - Unknown session raises `SessionNotFoundError`. A false `verify_chain` raises `ChainIntegrityError`. The cursor starts after `session_start`.
   - The wrappers never call the real function in replay. They return `payload["result"]` or rebuild and raise the recorded exception. An exception that cannot be rebuilt raises `DivergenceError`.
   - `now/uuid4/random` return the recorded values as `datetime`, `UUID` and `float`
   - `close()` emits `UnconsumedEventsWarning(count)`. After a failure, only `close()` is accepted.
   - _Requirements: 3.5, 3.6, 3.12, 3.13, 4.2, 4.5, 4.6_
-- [ ] 4.3 Write the replay and divergence tests (`tests/test_replay.py`, `tests/test_invariants.py`)
+- [x] 4.3 Write the replay and divergence tests (`tests/test_replay.py`, `tests/test_invariants.py`)
   - Test 1: record then replay gives identical outputs, and every real-call counter is 0
   - Test 2: the sync `add` and the async `lookup` both replay
   - Test 3: `fail` raises `ValueError` in record, and replay raises `ValueError` with the same message and a counter of 0
@@ -114,7 +114,7 @@ Test numbers below follow `requirements.md` (Required tests 1-12).
   - Hypothesis (test 12): for any generated sequence of calls, replay gives identical outputs with zero real calls
   - `tests/test_invariants.py` holds the zero-real-calls and divergence tests that hook (c) runs
   - _Requirements: 3.5, 3.6, 3.9, 3.12, 3.13, 4.1-4.6_
-- [ ] 4.4 Checkpoint: run pytest, mypy --strict, ruff, and Hypothesis 20 times. Show output and stop.
+- [x] 4.4 Checkpoint: run pytest, mypy --strict, ruff, and Hypothesis 20 times. Show output and stop.
 
 ## Phase 5: fork
 
@@ -153,6 +153,7 @@ Test numbers below follow `requirements.md` (Required tests 1-12).
 - [ ] 7.1 Write the README
   - Known limitations, stated plainly: a hash chain cannot detect truncation of the last events, or moving the last event into another session (changing `session_id` on a middle row is detected). The head hash must be anchored elsewhere if this matters.
   - Exception text is redacted only by the default hook, and only for the `key=value`, `key: value`, JSON-style and `Bearer <token>` forms. A custom redactor replaces that behavior.
+  - `redact_text` is pattern-based and best-effort. It is not a guarantee that no secret is stored. A secret written in any other form passes through unchanged. The default hook may also over-redact text that merely looks like `key: value`, for example `token: refresh needed` becomes `token: [REDACTED] needed`.
   - A call is recorded only when it completes. A call interrupted by a `BaseException` leaves no event. A call whose result is not JSON leaves no event, and the recorder then refuses further calls.
   - Default names are the function's `__qualname__` (for example `RealTools.add`) unless `name=` is given.
   - What Revenant core is, and what "deterministic" means here

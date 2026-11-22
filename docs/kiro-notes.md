@@ -86,6 +86,11 @@ Real findings from building Revenant with Kiro. Each entry is dated by phase.
   `key=value`, `key: value`, JSON-style and `Bearer <token>` secrets in strings. Other forms
   are not caught.
 
+### Phase 4 note: the piece rule was broken again
+
+- The second piece of `tests/test_replay.py` was added in one edit of about 200 lines.
+  `recorder.py` now measures 381 lines after Phase 4.
+
 ### Hook verification (confirmed)
 
 - Kiro ran both `lint` and `related` after a plain edit to `store.py`. Both are `PostFileSave`

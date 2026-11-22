@@ -13,22 +13,31 @@ import functools
 import inspect
 import random as stdlib_random
 import uuid
+import warnings
 from collections.abc import Callable, Coroutine, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any, Literal, ParamSpec, Self, TypeVar, cast, overload
 
-from revenant.errors import ConcurrentCallError, RevenantError
+from revenant.errors import (
+    ChainIntegrityError,
+    ConcurrentCallError,
+    DivergenceError,
+    RevenantError,
+    UnconsumedEventsWarning,
+)
 from revenant.events import (
     GENESIS_HASH,
     EventType,
     JSONValue,
     Redactor,
     build_event,
+    canonical_json,
     default_redactor,
     request_fingerprint,
     to_json_value,
 )
+from revenant.replay import ReplayCursor, rebuild_exception
 from revenant.store import TraceStore
 
 P = ParamSpec("P")
@@ -82,16 +91,23 @@ class Recorder:
             answer = ask("hello")
     """
 
-    def __init__(self, store: TraceStore, session_id: str, redactor: Redactor) -> None:
+    def __init__(
+        self,
+        store: TraceStore,
+        session_id: str,
+        redactor: Redactor,
+        cursor: ReplayCursor | None = None,
+    ) -> None:
         self._store = store
         self._redactor = redactor
+        self._cursor = cursor
         self.session_id = session_id
-        self.mode: Literal["record"] = "record"
+        self.mode: Literal["record", "replay"] = "record" if cursor is None else "replay"
         self._next_step = 0
         self._prev_hash = GENESIS_HASH
         self._active: str | None = None
         self._closed = False
-        self._broken: str | None = None
+        self._failure: str | None = None
 
     @classmethod
     def record(
@@ -114,6 +130,24 @@ class Recorder:
         recorder._write(EventType.SESSION_START, {"metadata": cleaned}, None)
         return recorder
 
+    @classmethod
+    def replay(
+        cls,
+        store: TraceStore,
+        session_id: str,
+        *,
+        redactor: Redactor = default_redactor,
+    ) -> Self:
+        """Open a recorded session for replay. Nothing is written and no real function runs.
+
+        Raises SessionNotFoundError for an unknown id. Raises ChainIntegrityError if the hash
+        chain does not verify, or if the session does not begin with session_start at step 0.
+        """
+        events = store.load_session(session_id)
+        if not store.verify_chain(session_id):
+            raise ChainIntegrityError(f"session {session_id!r} failed hash-chain verification")
+        return cls(store, session_id, redactor, ReplayCursor(events))
+
     def _write(
         self, event_type: EventType, payload: dict[str, JSONValue], parent_step: int | None
     ) -> int:
@@ -132,10 +166,15 @@ class Recorder:
         return event.step
 
     def _ensure_usable(self) -> None:
+        if self._failure is not None:
+            raise RevenantError(f"{self._failure}; the recorder is closed")
         if self._closed:
             raise RevenantError("recorder is closed")
-        if self._broken is not None:
-            raise RevenantError(f"recorder is unusable: {self._broken}")
+
+    def _fail_closed(self, reason: str) -> None:
+        """Close the recorder because a completed call could not be fully recorded."""
+        self._failure = reason
+        self._closed = True
 
     @contextmanager
     def _slot(self, name: str) -> Iterator[None]:
@@ -148,6 +187,28 @@ class Recorder:
             yield
         finally:
             self._active = None
+
+    def _nondeterminism(self, kind: str, produce: Callable[[], JSONValue]) -> JSONValue:
+        """Record a fresh value in record mode. In replay mode, return the recorded value."""
+        if self._cursor is None:
+            value = produce()
+            self._write(EventType.NONDETERMINISM, {"kind": kind, "value": value}, None)
+            return value
+        event = self._cursor.match_nondeterminism(kind)
+        self._cursor.advance(1)
+        return event.payload.get("value")
+
+    def _replay_call(self, call_type: EventType, name: str, args: JSONValue) -> JSONValue:
+        """Replay one wrapped call. No real function runs. The cursor moves only on success."""
+        if self._cursor is None:
+            raise RevenantError("replay requested on a recorder that is not in replay mode")
+        answer = self._cursor.match_call_pair(call_type, name, request_fingerprint(name, args))
+        if answer.type is EventType.ERROR:
+            error = rebuild_exception(answer)
+            self._cursor.advance(2)
+            raise error
+        self._cursor.advance(2)
+        return answer.payload.get("result")
 
     def _write_call(self, call_type: EventType, name: str, args: JSONValue) -> int:
         """Write the call event for a finished call. args are already redacted and validated."""
@@ -172,7 +233,9 @@ class Recorder:
             call_step = self._write_call(call_type, name, args)
             self._write(EventType.TOOL_RESULT, {"name": name, "result": payload}, call_step)
         except BaseException as exc:
-            self._broken = f"call {name!r} completed but was not recorded ({type(exc).__name__})"
+            self._fail_closed(
+                f"call {name!r} ran but its result could not be recorded ({type(exc).__name__})"
+            )
             raise
 
     def _record_failure(
@@ -193,8 +256,8 @@ class Recorder:
             call_step = self._write_call(call_type, name, args)
             self._write(EventType.ERROR, error, call_step)
         except BaseException as err:
-            self._broken = (
-                f"call {name!r} raised but its error was not recorded ({type(err).__name__})"
+            self._fail_closed(
+                f"call {name!r} raised, but its error could not be recorded ({type(err).__name__})"
             )
             raise
 
@@ -210,6 +273,8 @@ class Recorder:
             async def async_wrapper(*args: object, **kwargs: object) -> object:
                 with self._slot(call_name):
                     args_json = _prepare(self._redactor, _bind_arguments(signature, args, kwargs))
+                    if self._cursor is not None:
+                        return self._replay_call(call_type, call_name, args_json)
                     try:
                         result = await fn(*args, **kwargs)
                     except Exception as exc:
@@ -224,6 +289,8 @@ class Recorder:
         def sync_wrapper(*args: object, **kwargs: object) -> object:
             with self._slot(call_name):
                 args_json = _prepare(self._redactor, _bind_arguments(signature, args, kwargs))
+                if self._cursor is not None:
+                    return self._replay_call(call_type, call_name, args_json)
                 try:
                     result = fn(*args, **kwargs)
                 except Exception as exc:
@@ -258,32 +325,54 @@ class Recorder:
         """Timezone-aware UTC time. The recorded string is parsed back, so the returned value
         is the one replay will return."""
         with self._slot("now"):
-            stamp = datetime.now(UTC).isoformat()
-            self._write(EventType.NONDETERMINISM, {"kind": "now", "value": stamp}, None)
+            stamp = self._nondeterminism("now", lambda: datetime.now(UTC).isoformat())
+            if not isinstance(stamp, str):
+                raise RevenantError("recorded 'now' value is not a timestamp string")
             return datetime.fromisoformat(stamp)
 
     def uuid4(self) -> uuid.UUID:
         with self._slot("uuid4"):
-            value = uuid.uuid4()
-            self._write(EventType.NONDETERMINISM, {"kind": "uuid4", "value": str(value)}, None)
-            return value
+            text = self._nondeterminism("uuid4", lambda: str(uuid.uuid4()))
+            if not isinstance(text, str):
+                raise RevenantError("recorded 'uuid4' value is not a string")
+            return uuid.UUID(text)
 
     def random(self) -> float:
         """A pseudo-random float in [0, 1). Not for security use."""
         with self._slot("random"):
-            value = stdlib_random.random()  # noqa: S311
-            self._write(EventType.NONDETERMINISM, {"kind": "random", "value": value}, None)
-            return value
+            value = self._nondeterminism("random", lambda: stdlib_random.random())  # noqa: S311
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                raise RevenantError("recorded 'random' value is not a number")
+            return float(value)
 
     def final_answer(self, value: JSONValue) -> JSONValue:
         with self._slot("final_answer"):
             cleaned = _prepare(self._redactor, value)
-            self._write(EventType.FINAL_ANSWER, {"value": cleaned}, None)
+            if self._cursor is None:
+                self._write(EventType.FINAL_ANSWER, {"value": cleaned}, None)
+                return cleaned
+            event = self._cursor.match_final_answer()
+            recorded = event.payload.get("value")
+            if canonical_json(recorded) != canonical_json(cleaned):
+                raise DivergenceError(
+                    event.step,
+                    {"value": recorded},
+                    {"value": cleaned},
+                    "final answer differs from the recording",
+                )
+            self._cursor.advance(1)
             return cleaned
 
     def close(self) -> None:
-        """Stop accepting calls. Idempotent. The store is owned by the caller and stays open."""
+        """Stop accepting calls. Idempotent. The store is owned by the caller and stays open.
+
+        In replay mode, warn with UnconsumedEventsWarning if recorded events were not used.
+        """
+        if self._closed:
+            return
         self._closed = True
+        if self._cursor is not None and self._cursor.remaining() > 0:
+            warnings.warn(UnconsumedEventsWarning(self._cursor.remaining()), stacklevel=2)
 
     def __enter__(self) -> Self:
         return self

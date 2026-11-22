@@ -151,8 +151,12 @@ def test_non_json_result_leaves_no_event_for_that_call(store: SQLiteTraceStore) 
     events = session_events(store, "s1")
     assert [e.type for e in events] == [EventType.SESSION_START]  # no call, no result
     assert store.verify_chain("s1")  # nothing lossy was stored
-    with pytest.raises(RevenantError, match="unusable"):
+    with pytest.raises(RevenantError) as info:
         rec.wrap_tool(pair)()
+    message = str(info.value)
+    assert "ran but its result could not be recorded" in message
+    assert message.endswith("the recorder is closed")
+    assert "pair" in message  # names the call
 
 
 def test_exception_is_recorded_and_reraised_with_same_type(
@@ -179,7 +183,7 @@ def test_exception_args_that_are_not_json_raise_serialization_error(
     rec = Recorder.record(store, session_id="s1")
     with pytest.raises(PayloadSerializationError):
         rec.wrap_tool(boom)()
-    with pytest.raises(RevenantError, match="unusable"):
+    with pytest.raises(RevenantError, match="the recorder is closed"):
         rec.wrap_tool(boom)()
 
 
