@@ -135,17 +135,17 @@ Test numbers below follow `requirements.md` (Required tests 1-12).
 
 ## Phase 6: diff
 
-- [ ] 6. Implement `diff.py`
-- [ ] 6.1 Implement `DivergenceKind`, `StepDiff`, `TraceDiff`, `diff_sessions`
+- [x] 6. Implement `diff.py`
+- [x] 6.1 Implement `DivergenceKind`, `StepDiff`, `TraceDiff`, `diff_sessions`
   - A pure function over two `Sequence[Event]` that ignores `event_id`, `session_id`, `timestamp`, `prev_hash` and `hash`
   - Kind rules from design section 9
   - _Requirements: 6.1-6.4_
-- [ ] 6.2 Write the diff tests (test 8)
+- [x] 6.2 Write the diff tests (test 8)
   - Identical sessions give `first_divergent_step=None`. A different tool, different args, a different result and a different length each give the correct first step and kind.
   - Several differences are all listed in `differing_steps`. `TraceDiff` is data, and `dataclasses.asdict` works.
   - A forked child compared with its parent diverges first at the override step, with kind `result`
   - _Requirements: 6.1-6.4_
-- [ ] 6.3 Checkpoint: run pytest, mypy --strict, ruff, and Hypothesis 20 times. Show output and stop.
+- [x] 6.3 Checkpoint: run pytest, mypy --strict, ruff, and Hypothesis 20 times. Show output and stop.
 
 ## Phase 7: README
 
