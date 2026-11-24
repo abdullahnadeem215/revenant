@@ -52,11 +52,8 @@ class ReplayCursor:
             )
         return self._events[index]
 
-    def match_call_pair(self, call_type: EventType, name: str, fingerprint: str) -> Event:
-        """Check the call at the cursor and its answer right after it.
-
-        Returns the answer event (tool_result or error). Does not advance.
-        """
+    def match_call(self, call_type: EventType, name: str, fingerprint: str) -> Event:
+        """Check only the call event at the cursor. Does not advance."""
         call = self._event_at(0, f"a {call_type.value} for {name!r}")
         expected = {"type": call_type.value, "name": name, "fingerprint": fingerprint}
         actual: dict[str, JSONValue] = {
@@ -71,6 +68,14 @@ class ReplayCursor:
             raise DivergenceError(call.step, expected, actual, "different tool name")
         if call.payload.get("fingerprint") != fingerprint:
             raise DivergenceError(call.step, expected, actual, "arguments differ")
+        return call
+
+    def match_call_pair(self, call_type: EventType, name: str, fingerprint: str) -> Event:
+        """Check the call at the cursor and its answer right after it.
+
+        Returns the answer event (tool_result or error). Does not advance.
+        """
+        call = self.match_call(call_type, name, fingerprint)
         answer = self._event_at(1, f"the answer to the call {name!r}")
         if answer.type not in (EventType.TOOL_RESULT, EventType.ERROR):
             actual_answer: dict[str, JSONValue] = {"type": answer.type.value}

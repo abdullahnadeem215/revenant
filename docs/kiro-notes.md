@@ -101,3 +101,10 @@ Real findings from building Revenant with Kiro. Each entry is dated by phase.
   Its other keys are `cwd`, `hook_event_name` and `session_id`.
 - Each hook run appends to `%TEMP%\revenant_hooks.log`. The log holds action names, resolved
   paths and stdin key names only, never values.
+
+## Phase 5: fork mode
+
+- A fork checks the parent chain, then validates the fork step (a call event inside the parent). The child session is created with its parent link, then a copy of the prefix is written.
+- At the fork step the call is checked against the parent's call event. The override is validated before the cursor moves, so a bad override leaves the recorder where it was.
+- Known gap: the store cannot delete a session. If copying the prefix fails partway, a partial child session stays in the store and is not marked. Replaying it fails closed, because its chain is incomplete.
+- recorder.py now measures 517 lines. Splitting the fork code into its own module is a candidate for a later cleanup.

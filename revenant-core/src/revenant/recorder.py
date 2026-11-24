@@ -14,7 +14,7 @@ import inspect
 import random as stdlib_random
 import uuid
 import warnings
-from collections.abc import Callable, Coroutine, Iterator, Mapping
+from collections.abc import Callable, Coroutine, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any, Literal, ParamSpec, Self, TypeVar, cast, overload
@@ -23,11 +23,14 @@ from revenant.errors import (
     ChainIntegrityError,
     ConcurrentCallError,
     DivergenceError,
+    InvalidForkPointError,
     RevenantError,
     UnconsumedEventsWarning,
 )
 from revenant.events import (
+    CALL_TYPES,
     GENESIS_HASH,
+    Event,
     EventType,
     JSONValue,
     Redactor,
@@ -44,6 +47,35 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 __all__ = ["Recorder"]
+
+
+class _Unset:
+    """Marks an omitted override. None is a valid override, so it cannot serve as the default."""
+
+
+UNSET = _Unset()
+
+
+def _copy_prefix(store: TraceStore, prefix: Sequence[Event], session_id: str) -> str:
+    """Append copies of the parent's prefix to a new session. Returns the last hash.
+
+    Steps, types, payloads, timestamps and parent_step links are kept. Event ids, session id
+    and hashes are new, so the child's chain verifies on its own.
+    """
+    prev_hash = GENESIS_HASH
+    for source in prefix:
+        copy = build_event(
+            session_id=session_id,
+            step=source.step,
+            type=source.type,
+            payload=dict(source.payload),
+            prev_hash=prev_hash,
+            timestamp=source.timestamp,
+            parent_step=source.parent_step,
+        )
+        store.append_event(copy)
+        prev_hash = copy.hash
+    return prev_hash
 
 
 def _prepare(redactor: Redactor, value: object) -> JSONValue:
@@ -97,14 +129,23 @@ class Recorder:
         session_id: str,
         redactor: Redactor,
         cursor: ReplayCursor | None = None,
+        *,
+        fork_point: int | None = None,
+        override: JSONValue | _Unset = UNSET,
+        next_step: int = 0,
+        prev_hash: str = GENESIS_HASH,
     ) -> None:
         self._store = store
         self._redactor = redactor
         self._cursor = cursor
+        self._fork_point = fork_point
+        self._override = override
         self.session_id = session_id
-        self.mode: Literal["record", "replay"] = "record" if cursor is None else "replay"
-        self._next_step = 0
-        self._prev_hash = GENESIS_HASH
+        self.mode: Literal["record", "replay", "fork"] = (
+            "fork" if fork_point is not None else ("record" if cursor is None else "replay")
+        )
+        self._next_step = next_step
+        self._prev_hash = prev_hash
         self._active: str | None = None
         self._closed = False
         self._failure: str | None = None
@@ -147,6 +188,50 @@ class Recorder:
         if not store.verify_chain(session_id):
             raise ChainIntegrityError(f"session {session_id!r} failed hash-chain verification")
         return cls(store, session_id, redactor, ReplayCursor(events))
+
+    @classmethod
+    def fork(
+        cls,
+        store: TraceStore,
+        parent_session_id: str,
+        at_step: int,
+        *,
+        override: JSONValue | _Unset = UNSET,
+        session_id: str | None = None,
+        redactor: Redactor = default_redactor,
+    ) -> Self:
+        """Start a new session that replays the parent before at_step and runs live from it.
+
+        at_step must be the step of an llm_call or tool_call event in the parent. The child
+        is linked to the parent (parent_session_id, parent_step) and starts with a copy of the
+        parent's prefix, so its chain verifies alone. The parent is never written to.
+
+        With override, the call at at_step is recorded in the child but its result is the
+        override, and the real function is not called for it. Without override, the real
+        function runs for that call.
+        """
+        parent = store.load_session(parent_session_id)
+        if not store.verify_chain(parent_session_id):
+            raise ChainIntegrityError(
+                f"session {parent_session_id!r} failed hash-chain verification"
+            )
+        if not 0 < at_step < len(parent) or parent[at_step].type not in CALL_TYPES:
+            raise InvalidForkPointError(
+                f"step {at_step} of session {parent_session_id!r} is not a call event"
+            )
+        child_id = session_id if session_id is not None else uuid.uuid4().hex
+        store.create_session(child_id, parent_session_id=parent_session_id, parent_step=at_step)
+        prev_hash = _copy_prefix(store, parent[:at_step], child_id)
+        return cls(
+            store,
+            child_id,
+            redactor,
+            ReplayCursor(parent),
+            fork_point=at_step,
+            override=override,
+            next_step=at_step,
+            prev_hash=prev_hash,
+        )
 
     def _write(
         self, event_type: EventType, payload: dict[str, JSONValue], parent_step: int | None
@@ -197,6 +282,48 @@ class Recorder:
         event = self._cursor.match_nondeterminism(kind)
         self._cursor.advance(1)
         return event.payload.get("value")
+
+    def _replay_or_fork_point(
+        self, call_type: EventType, name: str, args: JSONValue
+    ) -> JSONValue | _Unset:
+        """Answer a call from the recording. Return UNSET when the call must run live.
+
+        Before the fork step, the call is replayed from the parent. At the fork step, the call
+        is checked against the parent's call event. The cursor moves only after that check and
+        after the override is validated, so a failure leaves the recorder where it was.
+        """
+        cursor = self._cursor
+        if cursor is None:
+            return UNSET
+        if self._fork_point is None or cursor.position < self._fork_point:
+            return self._replay_call(call_type, name, args)
+        cursor.match_call(call_type, name, request_fingerprint(name, args))
+        if isinstance(self._override, _Unset):
+            self._cursor = None
+            return UNSET
+        value = _prepare(self._redactor, self._override)
+        self._cursor = None
+        return self._record_overridden(call_type, name, args, value)
+
+    def _record_overridden(
+        self, call_type: EventType, name: str, args: JSONValue, value: JSONValue
+    ) -> JSONValue:
+        """Record the fork-step call with the override as its result. The real function is not
+        called."""
+        try:
+            call_step = self._write_call(call_type, name, args)
+            payload: dict[str, JSONValue] = {
+                "name": name,
+                "result": value,
+                "overridden": True,
+            }
+            self._write(EventType.TOOL_RESULT, payload, call_step)
+        except BaseException as exc:
+            self._fail_closed(
+                f"call {name!r} at the fork step was not recorded ({type(exc).__name__})"
+            )
+            raise
+        return value
 
     def _replay_call(self, call_type: EventType, name: str, args: JSONValue) -> JSONValue:
         """Replay one wrapped call. No real function runs. The cursor moves only on success."""
@@ -273,8 +400,9 @@ class Recorder:
             async def async_wrapper(*args: object, **kwargs: object) -> object:
                 with self._slot(call_name):
                     args_json = _prepare(self._redactor, _bind_arguments(signature, args, kwargs))
-                    if self._cursor is not None:
-                        return self._replay_call(call_type, call_name, args_json)
+                    answer = self._replay_or_fork_point(call_type, call_name, args_json)
+                    if not isinstance(answer, _Unset):
+                        return answer
                     try:
                         result = await fn(*args, **kwargs)
                     except Exception as exc:
@@ -289,8 +417,9 @@ class Recorder:
         def sync_wrapper(*args: object, **kwargs: object) -> object:
             with self._slot(call_name):
                 args_json = _prepare(self._redactor, _bind_arguments(signature, args, kwargs))
-                if self._cursor is not None:
-                    return self._replay_call(call_type, call_name, args_json)
+                answer = self._replay_or_fork_point(call_type, call_name, args_json)
+                if not isinstance(answer, _Unset):
+                    return answer
                 try:
                     result = fn(*args, **kwargs)
                 except Exception as exc:
@@ -371,8 +500,15 @@ class Recorder:
         if self._closed:
             return
         self._closed = True
-        if self._cursor is not None and self._cursor.remaining() > 0:
-            warnings.warn(UnconsumedEventsWarning(self._cursor.remaining()), stacklevel=2)
+        if self._cursor is not None:
+            # In fork mode only the prefix counts. Parent events from the fork step on are not
+            # this session's to consume.
+            if self._fork_point is None:
+                unconsumed = self._cursor.remaining()
+            else:
+                unconsumed = max(0, self._fork_point - self._cursor.position)
+            if unconsumed > 0:
+                warnings.warn(UnconsumedEventsWarning(unconsumed), stacklevel=2)
 
     def __enter__(self) -> Self:
         return self

@@ -118,20 +118,20 @@ Test numbers below follow `requirements.md` (Required tests 1-12).
 
 ## Phase 5: fork
 
-- [ ] 5. Implement fork mode
-- [ ] 5.1 Implement `Recorder.fork(store, parent_session_id, at_step, *, override=UNSET, session_id=None, redactor=...)`
+- [x] 5. Implement fork mode
+- [x] 5.1 Implement `Recorder.fork(store, parent_session_id, at_step, *, override=UNSET, session_id=None, redactor=...)`
   - Verify the parent chain and validate `at_step`, raising `InvalidForkPointError`
   - Create the child with `parent_session_id` and `parent_step`, and copy steps `0..at_step-1` with re-hashed chain links
   - Replay the prefix, then match the call at `at_step` against the parent and record it in the child
   - With an override, skip the real call and record `result = override`, `overridden = true`. Without one, call live. After that, everything is live.
   - Parent events after `at_step` do not count as unconsumed
   - _Requirements: 5.1-5.6_
-- [ ] 5.2 Write the fork tests (test 7)
+- [x] 5.2 Write the fork tests (test 7)
   - Use the worked example from design section 5. Counters must be `llm` 0, `search` 0 and `fetch` 1. The child has the parent link, the prefix copy is equal to the parent's prefix in content, the child chain verifies, and the parent is unchanged.
   - Fork without an override calls the real function once at `at_step`. `None` works as an override.
   - A non-call `at_step` and an out-of-range `at_step` raise `InvalidForkPointError`. Changed args at `at_step` raise `DivergenceError`.
   - _Requirements: 5.1-5.6_
-- [ ] 5.3 Checkpoint: run pytest, mypy --strict, ruff, and Hypothesis 20 times. Show output and stop.
+- [x] 5.3 Checkpoint: run pytest, mypy --strict, ruff, and Hypothesis 20 times. Show output and stop.
 
 ## Phase 6: diff
 
