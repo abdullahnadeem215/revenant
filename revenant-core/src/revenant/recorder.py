@@ -113,6 +113,7 @@ def _default_name(fn: object) -> str:
     return qualname if isinstance(qualname, str) else type(fn).__qualname__
 
 
+# A DivergenceError closes the recorder. See design.md section 4 and the README limitations.
 class Recorder:
     """Records wrapped calls and nondeterministic values into one session.
 
