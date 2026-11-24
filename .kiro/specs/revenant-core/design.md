@@ -160,16 +160,16 @@ stateDiagram-v2
 | Opening | fork constructed | `at_step` out of range or not a call event | no recorder | `InvalidForkPointError` |
 | InCall | another call or op starts | a call is already active | first call unaffected | `ConcurrentCallError` |
 | InCall | `take_call` | no events left | Idle, cursor unchanged | `ReplayExhaustedError` |
-| InCall | `take_call` | type, `name` or `fingerprint` differs | Idle, cursor unchanged | `DivergenceError(step, expected, actual, reason)` |
+| InCall | `take_call` | type, `name` or `fingerprint` differs | Closed; every later call raises RevenantError "replay diverged at step N; recorder is closed" | `DivergenceError(step, expected, actual, reason)` |
 | InCall | `take_answer` | no next event | Idle, cursor unchanged | `ReplayExhaustedError` |
-| InCall | `take_answer` | not `tool_result`/`error` with `parent_step == call_step` | Idle, cursor unchanged | `DivergenceError` |
-| InCall | nondeterminism op | next event is not `nondeterminism` of the same `kind` | Idle, cursor unchanged | `DivergenceError` |
-| InCall | recorded `error` | exception class cannot be rebuilt (decision B) | Idle, cursor unchanged | `DivergenceError` |
+| InCall | `take_answer` | not `tool_result`/`error` with `parent_step == call_step` | Closed; every later call raises RevenantError "replay diverged at step N; recorder is closed" | `DivergenceError` |
+| InCall | nondeterminism op | next event is not `nondeterminism` of the same `kind` | Closed; every later call raises RevenantError "replay diverged at step N; recorder is closed" | `DivergenceError` |
+| InCall | recorded `error` | exception class cannot be rebuilt (decision B) | Closed; every later call raises RevenantError "replay diverged at step N; recorder is closed" | `DivergenceError` |
 | InCall | recorded `error` | class rebuilt | Idle | the recorded exception is raised to the caller |
 | Idle | `close()` | unconsumed events remain | Closed | `UnconsumedEventsWarning(count)` (warning only) |
 | Closed | any call | | stays Closed | `RevenantError` |
 
-`expected` and `actual` in `DivergenceError` are dicts: `{type, name, fingerprint}` for calls, `{type, kind}` for nondeterminism, `None` where no event exists. `step` is the step of the recorded event that failed to match. On an error the cursor does not advance, and the recorder stays open. A retry of the same call therefore gives the same error. `close()` is idempotent, and `__exit__` calls it. In fork mode, the cursor is cleared once the fork step has been checked, and the call then runs live.
+`expected` and `actual` in `DivergenceError` are dicts: `{type, name, fingerprint}` for calls, `{type, kind}` for nondeterminism, `None` where no event exists. `step` is the step of the recorded event that failed to match. A DivergenceError closes the recorder and leaves the cursor where it was. Later calls, including a retry of the same call, raise RevenantError with the message "replay diverged at step N; recorder is closed". A ReplayExhaustedError does not close the recorder. `close()` is idempotent, and `__exit__` calls it. In fork mode, the cursor is cleared once the fork step has been checked, and the call then runs live.
 
 In record mode, a real function that raises is not a recorder failure. The `error` event is written, the original exception is re-raised, and the state returns to Idle.
 

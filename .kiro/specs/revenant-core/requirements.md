@@ -73,7 +73,7 @@ Revenant is a record-and-replay core library for AI agent sessions. It is domain
 
 1. THE replay SHALL read a cursor over recorded events in step order.
 2. THE replay SHALL NEVER call the real function.
-3. IF the call name or `request_fingerprint` differs from the next recorded call, THEN THE replay SHALL raise `DivergenceError(step, expected, actual, reason)`.
+3. IF the call name or `request_fingerprint` differs from the next recorded call, THEN THE replay SHALL raise `DivergenceError(step, expected, actual, reason)`. The recorder SHALL then be closed: every later call, including a retry of the same call, SHALL raise `RevenantError` with the message `replay diverged at step N; recorder is closed`. The replay cursor SHALL stay where it was.
 4. IF no recorded events remain when one is needed, THEN THE replay SHALL raise `ReplayExhaustedError`.
 5. WHEN the recorder closes with unconsumed events, THE recorder SHALL emit `UnconsumedEventsWarning` carrying the count.
 6. WHEN replay starts, THE recorder SHALL verify the chain and raise `ChainIntegrityError` on failure.

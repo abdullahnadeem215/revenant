@@ -122,3 +122,36 @@ def test_fork_child_diverges_from_parent_first_at_the_override(store: SQLiteTrac
     )
     result = diff_sessions(store.load_session("parent"), store.load_session("child"))
     assert (result.first_divergent_step, result.kind) == (4, DivergenceKind.RESULT)
+
+
+def test_two_empty_sessions_are_identical() -> None:
+    result = diff_sessions([], [])
+    assert (result.first_divergent_step, result.kind, result.differing_steps) == (None, None, ())
+
+
+def test_empty_against_recorded_session_is_a_length_difference_from_step_zero() -> None:
+    result = diff_sessions([], trace(("search", {"q": 1}, "r")))
+    assert (result.first_divergent_step, result.kind) == (0, DivergenceKind.LENGTH)
+
+
+def test_tool_result_versus_error_at_the_same_step_is_a_result_change() -> None:
+    left = trace(("search", {"q": 1}, "r"))
+    right = list(left)
+    right[2] = build_event(
+        session_id="x",
+        step=2,
+        type=EventType.ERROR,
+        payload={"name": "search", "exc_type": "builtins.ValueError", "message": "m", "args": []},
+        prev_hash=left[1].hash,
+        parent_step=1,
+    )
+    result = diff_sessions(left, right)
+    assert (result.first_divergent_step, result.kind) == (2, DivergenceKind.RESULT)
+
+
+def test_changed_parent_step_is_a_result_change() -> None:
+    left = trace(("search", {"q": 1}, "r"))
+    right = list(left)
+    right[2] = right[2].model_copy(update={"parent_step": None})
+    result = diff_sessions(left, right)
+    assert (result.first_divergent_step, result.kind) == (2, DivergenceKind.RESULT)

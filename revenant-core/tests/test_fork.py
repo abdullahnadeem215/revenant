@@ -5,6 +5,7 @@ import pytest
 from revenant.errors import (
     DivergenceError,
     InvalidForkPointError,
+    RevenantError,
     SessionNotFoundError,
     UnconsumedEventsWarning,
 )
@@ -144,10 +145,11 @@ def test_changed_arguments_at_the_fork_step_raise_divergence(store: SQLiteTraceS
     child = Recorder.fork(store, "parent", 3, override={"hits": []}, session_id="child")
     child.wrap_llm(ScriptedLLM(["x"]), name="llm")("what is 1 + 2?")
     add = child.wrap_tool(tools.add)
-    for _ in range(2):  # a retry gives the same error: the cursor did not move
-        with pytest.raises(DivergenceError) as info:
-            add(1, 99)
-        assert (info.value.step, info.value.reason) == (3, "arguments differ")
+    with pytest.raises(DivergenceError) as info:
+        add(1, 99)
+    assert (info.value.step, info.value.reason) == (3, "arguments differ")
+    with pytest.raises(RevenantError, match=r"^replay diverged at step 3; recorder is closed$"):
+        add(1, 99)  # a retry is refused: the recorder is closed
     assert tools.add_calls == 0
 
 

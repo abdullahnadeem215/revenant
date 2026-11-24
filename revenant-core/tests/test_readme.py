@@ -36,7 +36,7 @@ def test_readme_states_each_known_limitation() -> None:
         "__qualname__",
         "only when it completes",
         "exception text",
-        "retry of the same call",
+        "recorder is closed",
         "sequential",
         "side effects",
         "partial child",

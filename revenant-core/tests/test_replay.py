@@ -13,6 +13,7 @@ from revenant.errors import (
     ChainIntegrityError,
     DivergenceError,
     ReplayExhaustedError,
+    RevenantError,
     SessionNotFoundError,
     UnconsumedEventsWarning,
 )
@@ -120,7 +121,7 @@ def test_unknown_session_and_empty_session_are_rejected(store: SQLiteTraceStore)
         Recorder.replay(store, "empty")
 
 
-def test_divergence_leaves_cursor_and_a_retry_gives_the_same_error(
+def test_divergence_closes_the_recorder_and_later_calls_get_the_closed_error(
     store: SQLiteTraceStore,
 ) -> None:
     run_driver(Recorder.record(store, session_id="s1"), ScriptedLLM(["three"]), RealTools())
@@ -128,17 +129,16 @@ def test_divergence_leaves_cursor_and_a_retry_gives_the_same_error(
     replay.wrap_llm(ScriptedLLM(["three"]), name="llm")("what is 1 + 2?")
     tools = RealTools()
     add = replay.wrap_tool(tools.add)
-    errors: list[DivergenceError] = []
-    for _ in range(2):
-        with pytest.raises(DivergenceError) as info:
-            add(1, 99)
-        errors.append(info.value)
-    assert (
-        (errors[0].step, errors[0].reason)
-        == (errors[1].step, errors[1].reason)
-        == (3, "arguments differ")
-    )
-    assert add(1, 2) == 3  # the matching call still lines up with recorded step 3
+    with pytest.raises(DivergenceError) as info:
+        add(1, 99)
+    assert (info.value.step, info.value.reason) == (3, "arguments differ")
+    closed = "replay diverged at step 3; recorder is closed"
+    with pytest.raises(RevenantError) as retry:
+        add(1, 99)  # a retry of the same call
+    assert str(retry.value) == closed
+    with pytest.raises(RevenantError) as other:
+        add(1, 2)  # a different, correct call
+    assert str(other.value) == closed
     assert tools.add_calls == 0
 
 
@@ -178,7 +178,8 @@ def test_replay_starts_after_session_start(store: SQLiteTraceStore) -> None:
     with pytest.raises(DivergenceError) as info:
         replay.wrap_tool(RealTools().add)(9, 9)
     assert info.value.step == 1
-    assert replay.wrap_tool(RealTools().add)(1, 2) == 3
+    with pytest.raises(RevenantError, match="replay diverged at step 1; recorder is closed"):
+        replay.wrap_tool(RealTools().add)(1, 2)
 
 
 def test_unconsumed_events_warn_with_the_count_on_close(store: SQLiteTraceStore) -> None:
@@ -205,7 +206,8 @@ def test_final_answer_must_match_the_recording(store: SQLiteTraceStore) -> None:
     replay = Recorder.replay(store, "s1")
     with pytest.raises(DivergenceError):
         replay.final_answer({"a": 2})
-    assert replay.final_answer({"a": 1}) == {"a": 1}
+    with pytest.raises(RevenantError, match="replay diverged at step 1; recorder is closed"):
+        replay.final_answer({"a": 1})
 
 
 def test_error_for_an_unloaded_exception_class_is_a_divergence(

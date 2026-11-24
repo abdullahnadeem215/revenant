@@ -100,8 +100,10 @@ It also masks secrets written in free text as `key=value`, `key: value`, JSON-st
   calls and threads, raise `ConcurrentCallError`.
 - **Plain JSON on replay.** Replay returns dicts, lists, strings, numbers, booleans and `None`.
   Tuples and other non-JSON values cannot be recorded at all.
-- **Divergence keeps the position.** A mismatch raises `DivergenceError` and does not move the
-  replay position. A retry of the same call gives the same error. The recorder stays open.
+- **Divergence closes the recorder.** After any `DivergenceError`, the recorder is closed.
+  Every later call raises `RevenantError` with the message
+  `replay diverged at step N; recorder is closed`. This includes a retry of the same call and
+  a different call. The replay position is left where it was. Start a new replay to continue.
 - **Exception rebuilding.** A recorded exception is rebuilt only if its class is already
   imported in the running process. Otherwise replay raises `DivergenceError`.
 - **Partial forks.** The store cannot delete sessions. If copying a fork's prefix fails partway,

@@ -251,25 +251,35 @@ class Recorder:
         return event.step
 
     def _ensure_usable(self) -> None:
+        """Refuse every operation once the recorder is closed. The failure message, when there
+        is one, names the cause and says the recorder is closed."""
         if self._failure is not None:
-            raise RevenantError(f"{self._failure}; the recorder is closed")
+            raise RevenantError(self._failure)
         if self._closed:
             raise RevenantError("recorder is closed")
 
-    def _fail_closed(self, reason: str) -> None:
-        """Close the recorder because a completed call could not be fully recorded."""
-        self._failure = reason
+    def _fail_closed(self, message: str) -> None:
+        """Close the recorder. message is the full text every later call will raise."""
+        self._failure = message
         self._closed = True
 
     @contextmanager
     def _slot(self, name: str) -> Iterator[None]:
-        """Mark one wrapped call or nondeterminism op as active. Calls must not overlap."""
+        """Mark one wrapped call or nondeterminism op as active. Calls must not overlap.
+
+        A DivergenceError from inside the slot closes the recorder. The replay cursor is left
+        where it was. Later calls, including a retry of the same call, raise RevenantError with
+        the message "replay diverged at step N; recorder is closed".
+        """
         self._ensure_usable()
         if self._active is not None:
             raise ConcurrentCallError(active=self._active, attempted=name)
         self._active = name
         try:
             yield
+        except DivergenceError as err:
+            self._fail_closed(f"replay diverged at step {err.step}; recorder is closed")
+            raise
         finally:
             self._active = None
 
@@ -320,7 +330,8 @@ class Recorder:
             self._write(EventType.TOOL_RESULT, payload, call_step)
         except BaseException as exc:
             self._fail_closed(
-                f"call {name!r} at the fork step was not recorded ({type(exc).__name__})"
+                f"call {name!r} at the fork step was not recorded"
+                f" ({type(exc).__name__}); the recorder is closed"
             )
             raise
         return value
@@ -361,7 +372,8 @@ class Recorder:
             self._write(EventType.TOOL_RESULT, {"name": name, "result": payload}, call_step)
         except BaseException as exc:
             self._fail_closed(
-                f"call {name!r} ran but its result could not be recorded ({type(exc).__name__})"
+                f"call {name!r} ran but its result could not be recorded"
+                f" ({type(exc).__name__}); the recorder is closed"
             )
             raise
 
@@ -384,7 +396,8 @@ class Recorder:
             self._write(EventType.ERROR, error, call_step)
         except BaseException as err:
             self._fail_closed(
-                f"call {name!r} raised, but its error could not be recorded ({type(err).__name__})"
+                f"call {name!r} raised, but its error could not be recorded"
+                f" ({type(err).__name__}); the recorder is closed"
             )
             raise
 
