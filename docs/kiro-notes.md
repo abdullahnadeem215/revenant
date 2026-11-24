@@ -108,3 +108,10 @@ Real findings from building Revenant with Kiro. Each entry is dated by phase.
 - At the fork step the call is checked against the parent's call event. The override is validated before the cursor moves, so a bad override leaves the recorder where it was.
 - Known gap: the store cannot delete a session. If copying the prefix fails partway, a partial child session stays in the store and is not marked. Replaying it fails closed, because its chain is incomplete.
 - recorder.py now measures 517 lines. Splitting the fork code into its own module is a candidate for a later cleanup.
+
+## Divergence policy and verification round
+
+- The divergence policy was approved earlier. It was first implemented in this step, not in Phases 4 to 6 as it should have been. After any DivergenceError, the recorder closes. Every later call raises RevenantError with the message 
+eplay diverged at step N; recorder is closed. The cursor stays where it was.
+- Step 7 was skipped in the previous round. This note records that gap.
+- The invariants hook's log is opt-in through REVENANT_HOOK_LOG. A user-scope change to that variable was blocked by Kiro, so no persistent setting was made. The helper's log line for the invariants action was checked by running the helper directly.
