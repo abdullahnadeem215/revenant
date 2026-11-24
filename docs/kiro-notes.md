@@ -115,3 +115,13 @@ Real findings from building Revenant with Kiro. Each entry is dated by phase.
 eplay diverged at step N; recorder is closed. The cursor stays where it was.
 - Step 7 was skipped in the previous round. This note records that gap.
 - The invariants hook's log is opt-in through REVENANT_HOOK_LOG. A user-scope change to that variable was blocked by Kiro, so no persistent setting was made. The helper's log line for the invariants action was checked by running the helper directly.
+
+## Spec revenant-dev: D3 changed before any code
+- The first draft of the bad-edit finder matched one named test id (`tests/test_stats.py::test_mean_of_three`) in `failed_tests`. That put an answer about this sample into the app, and it tied the finder to one test.
+- Decision, approved by the user: a write is bad when the next recorded `run_tests` exits non-zero, with no other write in between. The finder takes only the stored events. It reads no test name, expected step or scripted answer.
+- The term is defined in `applications/revenant-dev/README.md`. A bad edit is a mechanical label, not a general judgment that the agent behaved wrongly.
+- A second scripted run, with one extra read before the bad write, must report its own step from recorded results. This is a milestone test (requirement 7.7).
+
+## revenant-dev: Task B blocked
+- Task B needs `D:\Revenant\revenant-core\README.md` and a passing `tests/test_readme.py`. When checked, the README was missing and all 3 tests in `test_readme.py` failed with `FileNotFoundError` on that path. Task B was not run.
+- `D:\Revenant` and `F:\Revenant` are separate working copies at the same commit. `F:` holds the approved spec. `D:` has no `.kiro/specs/revenant-dev/`, and its `docs/kiro-notes.md` is 117 lines against 124 in `F:`.
