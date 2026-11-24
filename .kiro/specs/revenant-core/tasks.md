@@ -149,8 +149,8 @@ Test numbers below follow `requirements.md` (Required tests 1-12).
 
 ## Phase 7: README
 
-- [ ] 7. Write `revenant-core/README.md`
-- [ ] 7.1 Write the README
+- [x] 7. Write `revenant-core/README.md`
+- [x] 7.1 Write the README
   - Known limitations, stated plainly: a hash chain cannot detect truncation of the last events, or moving the last event into another session (changing `session_id` on a middle row is detected). The head hash must be anchored elsewhere if this matters.
   - Exception text is redacted only by the default hook, and only for the `key=value`, `key: value`, JSON-style and `Bearer <token>` forms. A custom redactor replaces that behavior.
   - `redact_text` is pattern-based and best-effort. It is not a guarantee that no secret is stored. A secret written in any other form passes through unchanged. The default hook may also over-redact text that merely looks like `key: value`, for example `token: refresh needed` becomes `token: [REDACTED] needed`.
@@ -160,6 +160,6 @@ Test numbers below follow `requirements.md` (Required tests 1-12).
   - A record and replay usage example under 20 lines
   - Short sections on fork, diff, redaction, and the limitations from design section 10 (unwrapped nondeterminism, side effects in fork, plain JSON, sequential only)
   - _Requirements: product.md_
-- [ ] 7.2 Add a test that extracts the README example and runs it
+- [x] 7.2 Add a test that extracts the README example and runs it
   - The test checks that the example is under 20 lines and that its replay real-call counter is 0
-- [ ] 7.3 Final checkpoint: run pytest, mypy --strict, ruff, and Hypothesis 20 times. Check the codebase for network or model calls (no `socket`, `urllib`, `http`, `requests` or LLM SDK imports). Show output and stop.
+- [x] 7.3 Final checkpoint: run pytest, mypy --strict, ruff, and Hypothesis 20 times. Check the codebase for network or model calls (no `socket`, `urllib`, `http`, `requests` or LLM SDK imports). Show output and stop.
