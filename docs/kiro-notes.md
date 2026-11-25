@@ -125,3 +125,9 @@ eplay diverged at step N; recorder is closed. The cursor stays where it was.
 ## revenant-dev: Task B blocked
 - Task B needs `D:\Revenant\revenant-core\README.md` and a passing `tests/test_readme.py`. When checked, the README was missing and all 3 tests in `test_readme.py` failed with `FileNotFoundError` on that path. Task B was not run.
 - `D:\Revenant` and `F:\Revenant` are separate working copies at the same commit. `F:` holds the approved spec. `D:` has no `.kiro/specs/revenant-dev/`, and its `docs/kiro-notes.md` is 117 lines against 124 in `F:`.
+
+## revenant-dev: Phase 0 (environment and baseline)
+- Phase 0 was done early, before the spec's milestone phases were approved to start. It created the app venv, the editable install of `revenant-core` from `../../revenant-core`, `pyproject.toml`, `.gitignore`, the package `src/revenant_dev/`, and `tests/test_smoke.py`.
+- `sample_repo/` was created in Phase 0 instead of Phase 1 task 1.1, at the user's request. It has the planted bug in `sample_pkg/stats.py` and one failing test, `tests/test_stats.py::test_mean_of_three`. Running pytest inside `sample_repo/` gives `1 failed, 2 passed`.
+- The first ruff check failed on the import order in `tests/test_smoke.py`. Ruff treats `revenant_dev` as first-party, so it wants a blank line between the two imports. A blank line was added. No check was disabled.
+- Baseline: the core checkpoint passed (153 pytest tests, mypy --strict, ruff, Hypothesis 20 of 20). The app checks passed (pytest, mypy --strict, ruff check, ruff format --check).
