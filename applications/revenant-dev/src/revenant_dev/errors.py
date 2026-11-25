@@ -11,6 +11,7 @@ __all__ = [
     "AgentProtocolError",
     "AgentStepLimitError",
     "DemoError",
+    "ForkNotSupportedError",
     "SandboxViolationError",
     "ScriptExhaustedError",
     "ToolError",
@@ -39,3 +40,7 @@ class AgentProtocolError(DemoError):
 
 class AgentStepLimitError(DemoError):
     """The agent used max_steps turns without a final answer."""
+
+
+class ForkNotSupportedError(DemoError):
+    """A fork was requested without an override. v1 forks are override-only."""

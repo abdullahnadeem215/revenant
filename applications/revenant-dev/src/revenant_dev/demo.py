@@ -90,7 +90,7 @@ class RecordedRun:
     first_bad_edit: tuple[int, str] | None
 
 
-def _session_config(events: Sequence[Event]) -> tuple[str, int, int]:
+def session_config(events: Sequence[Event]) -> tuple[str, int, int]:
     """Read task, max_steps and extra_reads from the session_start metadata."""
     metadata = events[0].payload.get("metadata") if events else None
     if not isinstance(metadata, dict):
@@ -141,7 +141,7 @@ def replay_recorded_run(
     The workspace is opened only so the tools can be wrapped. No real function runs, so the
     counters stay at 0 and nothing is written there.
     """
-    task, max_steps, extra_reads = _session_config(store.load_session(session_id))
+    task, max_steps, extra_reads = session_config(store.load_session(session_id))
     counters = RealCallCounters()
     llm = ScriptedLLM(planned_script(extra_reads), counters)
     tools = make_tools(Workspace(workspace_root / session_id), counters)
