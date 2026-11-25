@@ -1,4 +1,4 @@
-"""Statistics helpers. Contains one planted bug for the demo agent to find."""
+"""Statistics helpers."""
 
 
 def mean(values: list[float]) -> float:
