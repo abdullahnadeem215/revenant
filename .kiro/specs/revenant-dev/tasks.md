@@ -37,7 +37,7 @@ Write each source file in pieces of about 100 lines or fewer, and check the line
     - `python -m venv .venv`, then `.venv\Scripts\python.exe -m pip install -e ..\..\revenant-core -e ".[dev]"`.
     - _Requirements: 1.2, 1.3_
   - [ ] 0.3 Record the baseline state of `revenant-core/`
-    - Before any edit, note `git -C f:\Revenant status --short -- revenant-core`. Two untracked files already exist there (`revenant-core/src/README.md`, `revenant-core/tests/test_integration_guide.py`). Leave them alone. After the install, the status must match this baseline.
+    - Before any edit, note `git -C f:\Revenant status --short -- revenant-core`. Two untracked files existed there at baseline: `revenant-core/src/README.md` and `revenant-core/tests/test_integration_guide.py`. The stray `revenant-core/src/README.md` was deleted in the commit `remove stray src README`. It was never tracked, so that commit only records this line. `revenant-core/tests/test_integration_guide.py` stays untracked until the commit `docs: integration guide`. After the install, the status must match this baseline.
     - _Requirements: 1.3_
   - [ ] 0.4 Write `tests/test_smoke.py`
     - Imports `revenant.Recorder` and `revenant_dev`. This proves the editable install works.
