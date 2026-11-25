@@ -111,7 +111,7 @@ Scope boundary: nothing under `revenant-core/` is modified. Domain code (files, 
 #### Acceptance Criteria
 
 1. IF a replayed agent makes a call that differs from the recording (another tool name, or other arguments), THEN replay SHALL raise `DivergenceError` from the core, and the agent SHALL NOT continue.
-2. A test SHALL replay the session with an agent variant that writes to a different path, and SHALL check that `DivergenceError` is raised at the recorded step.
+2. A replay given a changed input SHALL raise `DivergenceError` at the first mismatched call. A test SHALL replay a recorded session with a changed task text, which changes the arguments of the first LLM call, and SHALL check that the error reports step 1.
 
 ### Requirement 9: Redaction
 

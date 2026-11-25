@@ -46,26 +46,31 @@ Write each source file in pieces of about 100 lines or fewer, and check the line
 
 ## Phase 1: sample repository, errors, workspace and tools
 
-- [ ] 1. Build the sample repository and the tool layer
-  - [ ] 1.1 Create `sample_repo/`
+Phase 1 is done (commit `922e8ed`). By decision, the scripted LLM and agent loop from Phase 2, and milestone 1 from Phase 3, were built in the same phase. The Phase 2 and Phase 3 checkboxes below stay unchecked, because their tasks were not tracked one by one.
+
+- [x] 1. Build the sample repository and the tool layer
+  - [x] 1.1 Create `sample_repo/` (done in Phase 0, commit `f9b9ab4`)
     - `pytest.ini` (an empty `[pytest]` section), `sample_pkg/__init__.py`, `sample_pkg/stats.py` (the planted bug, `mean` divides by `len(values) - 1`), `sample_pkg/text.py` (`slugify`), `tests/test_stats.py` (`test_mean_of_three` fails), `tests/test_text.py` (passing tests).
     - Run `python -m pytest` inside `sample_repo/`. The output must show exactly one failure, `test_stats.py::test_mean_of_three`.
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
-  - [ ] 1.2 Implement `errors.py` and `counters.py`
-    - The error classes from design section 6, including `ForkNotSupportedError`. Each takes one message argument. `RealCallCounters` with `snapshot()` and `reset()`.
+  - [x] 1.2 Implement `errors.py` and `counters.py`
+    - The error classes from design section 6. Each takes one message argument. `RealCallCounters` with `snapshot()` and `reset()`.
+    - `ForkNotSupportedError` is not built. It belongs to fork (Phase 4).
     - _Requirements: 3.5, 4.5, 6.4, 10.4_
-  - [ ] 1.3 Implement `workspace.py`
+  - [x] 1.3 Implement `workspace.py`
     - `Workspace.resolve` with the escape checks, and `copy_sample`. The module docstring states the redaction limit (D5). There is no restore helper in v1 (D4).
     - _Requirements: 4.2, 5.1_
-  - [ ] 1.4 Implement `tools.py`
+  - [x] 1.4 Implement `tools.py`
     - `read_file`, `write_file`, `run_tests` as closures over one `Workspace` and one `RealCallCounters`. `run_tests` uses `sys.executable -m pytest -p no:cacheprovider -rf -q`, with `cwd` set to the workspace and a 60-second timeout. It parses counts and node ids only.
     - _Requirements: 4.1, 4.3, 4.4, 4.5, 4.6_
-  - [ ] 1.5 Write tests for phase 1
-    - `test_workspace.py` and `test_tools.py` as set out in design section 8.
+  - [x] 1.5 Write tests for phase 1
+    - `test_workspace.py` and `test_tools.py` as set out in design section 8. The symlink test in `test_workspace.py` is skipped on this machine.
     - _Requirements: 2.4, 4.2, 4.5, 5.1_
-- [ ] 1.6 Checkpoint: run the four checks, and show `python -m pytest` run from `sample_repo/`. Show output and stop.
+- [x] 1.6 Checkpoint: run the four checks, and show `python -m pytest` run from `sample_repo/`. Show output and stop.
 
 ## Phase 2: scripted LLM and agent loop
+
+Built in Phase 1 by decision (commit `922e8ed`). The checks in Phase 1 covered this code.
 
 - [ ] 2. Build the scripted LLM and the agent loop
   - [ ] 2.1 Implement `llm.py`
@@ -80,6 +85,8 @@ Write each source file in pieces of about 100 lines or fewer, and check the line
 - [ ] 2.4 Checkpoint: run the four checks. Show output and stop.
 
 ## Phase 3: milestone 1 (record, save, replay, report)
+
+Built in Phase 1 by decision (commit `922e8ed`). The checks in Phase 1 covered this code. Run 3.3 was done with `python -m revenant_dev.demo`.
 
 - [ ] 3. Run the milestone
   - [ ] 3.1 Implement `demo.py`
