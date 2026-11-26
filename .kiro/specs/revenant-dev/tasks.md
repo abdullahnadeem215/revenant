@@ -105,14 +105,23 @@ Built in Phase 1 by decision (commit `922e8ed`). The checks in Phase 1 covered t
 
 ## Phase 4: JSON API layer (v1 fork: override only)
 
-- [ ] 4. Expose the session data as plain functions
-  - [ ] 4.1 Implement `api.py`
-    - `list_sessions`, `session_events`, `diff_sessions`, and `fork_session` as in design section 7. `fork_session` follows design 4.3 steps 1-7: it requires `use_override=True`, counts the prefix calls, calls `Recorder.fork`, runs `run_agent` with `max_calls=k + 1` on a temporary empty workspace, reads the overridden result, and returns the diff. It writes no file and runs no live call.
+Done in commit `adb42f5` ("revenant-dev phase 2: backend api"). The user numbered this work "Phase 2". Its tasks are checked here under the spec's numbering.
+
+Changes from the original task text, made by decision:
+
+- The functions are `list_sessions`, `get_session`, `replay_summary`, `find_bad_edit` and `fork`. `session_events`, `diff_sessions` and `fork_session` are not separate functions. `diff` is returned inside `fork`, and `get_session` returns the events.
+- `fork` returns `child_session_id` and `diff` only. It does not return `overridden_result`.
+- `fork` takes no `workspace_root`. Its tools point at `.data/fork-no-workspace`, a folder that is never created. The real-call counters are checked through the internal `_fork` helper.
+- The API tests check fork results against stored events, not against hardcoded steps.
+
+- [x] 4. Expose the session data as plain functions
+  - [x] 4.1 Implement `api.py`
+    - Built as described above. `fork` requires `use_override=True`, counts the prefix calls, calls `Recorder.fork`, runs `run_agent` with `max_calls=k + 1`, and returns the diff. It writes no file and runs no live call.
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6_
-  - [ ] 4.2 Write `test_api.py`
-    - Round-trip through `canonical_json`. Unknown session and bad fork step raise the core errors. A fork without `use_override` raises `ForkNotSupportedError`. A fork with an override keeps all real-call counters at 0. The child stores the override at `at_step + 1`, links to its parent, and the diff's first divergent step is `at_step + 1`. The parent's event count and `verify_chain` are unchanged after a fork.
+  - [x] 4.2 Write `test_api.py`
+    - Round-trip through `canonical_json`. Unknown session and bad fork step raise the core errors. A fork without `use_override` raises `ForkNotSupportedError`. A fork with an override keeps all real-call counters at 0. The child stores the override at the answer step, links to its parent, and the diff's first divergent step is that answer step. The parent's event count and `verify_chain` are unchanged after a fork.
     - _Requirements: 10.2, 10.3, 10.4, 10.5_
-- [ ] 4.3 Checkpoint: run the four checks. Show output and stop.
+- [x] 4.3 Checkpoint: run the four checks. Show output and stop. (Passed at commit `adb42f5`: pytest 46 passed and 1 skipped, mypy --strict and ruff clean.)
 
 ## Phase 5: README and final gates
 
