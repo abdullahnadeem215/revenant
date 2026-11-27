@@ -32,6 +32,11 @@ describe("SessionScreen", () => {
       expect(screen.getByText(/First bad edit: step 7/)).toBeTruthy();
     });
     expect(screen.getByText("First bad edit: step 7 (sample_pkg/stats.py).")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "A bad edit is a write_file call after which the next recorded test run failed.",
+      ),
+    ).toBeTruthy();
     const highlighted = container.querySelectorAll('li[data-highlighted="true"]');
     expect(highlighted).toHaveLength(1);
     expect(highlighted[0].getAttribute("data-step")).toBe("7");

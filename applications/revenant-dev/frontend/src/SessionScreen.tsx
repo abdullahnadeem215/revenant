@@ -76,9 +76,14 @@ function SessionBody({ loaded }: { loaded: Loaded }) {
       {bad === null ? (
         <p className="banner">No bad edit: no write was followed by a failing test run.</p>
       ) : (
-        <p className="banner warn">
-          First bad edit: step {bad.step} ({bad.path}).
-        </p>
+        <>
+          <p className="banner warn">
+            First bad edit: step {bad.step} ({bad.path}).
+          </p>
+          <p className="explain">
+            A bad edit is a write_file call after which the next recorded test run failed.
+          </p>
+        </>
       )}
       <SessionTimeline events={session.events} highlightStep={bad?.step ?? null} />
     </>
