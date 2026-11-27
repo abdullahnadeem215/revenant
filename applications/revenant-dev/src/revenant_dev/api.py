@@ -21,6 +21,7 @@ from revenant import (
     SessionInfo,
     SessionNotFoundError,
     TraceStore,
+    canonical_json,
 )
 from revenant.diff import TraceDiff, diff_sessions
 from revenant.events import CALL_TYPES
@@ -159,6 +160,9 @@ def _fork(
         raise ForkNotSupportedError(
             "v1 fork is override-only: pass use_override=True together with an override"
         )
+    # Reject values that are not finite JSON before the core creates the child session, so a
+    # bad override leaves no partial child behind.
+    canonical_json(override)
     parent_events = store.load_session(parent_session_id)
     task, max_steps, extra_reads = session_config(parent_events)
     calls_before = sum(1 for e in parent_events if e.step < at_step and e.type in CALL_TYPES)

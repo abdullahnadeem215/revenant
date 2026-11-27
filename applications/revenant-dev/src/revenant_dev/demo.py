@@ -91,15 +91,20 @@ class RecordedRun:
 
 
 def session_config(events: Sequence[Event]) -> tuple[str, int, int]:
-    """Read task, max_steps and extra_reads from the session_start metadata."""
+    """Read task, max_steps and extra_reads from the session_start metadata.
+
+    A session recorded without the agent's metadata (for example by a plain Recorder call)
+    cannot be replayed or forked, so both cases raise the same error.
+    """
+    session_id = events[0].session_id if events else ""
     metadata = events[0].payload.get("metadata") if events else None
-    if not isinstance(metadata, dict):
-        raise AgentProtocolError("session has no metadata")
-    task = metadata.get("task")
-    max_steps = metadata.get("max_steps")
-    extra_reads = metadata.get("extra_reads")
+    task = metadata.get("task") if isinstance(metadata, dict) else None
+    max_steps = metadata.get("max_steps") if isinstance(metadata, dict) else None
+    extra_reads = metadata.get("extra_reads") if isinstance(metadata, dict) else None
     if not (isinstance(task, str) and isinstance(max_steps, int) and isinstance(extra_reads, int)):
-        raise AgentProtocolError("session metadata is incomplete")
+        raise AgentProtocolError(
+            f"session {session_id!r} has no agent metadata, so it cannot be replayed or forked"
+        )
     return task, max_steps, extra_reads
 
 

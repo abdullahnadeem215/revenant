@@ -1394,12 +1394,79 @@ The fork replays the parent up to `at_step` and records the call at `at_step` wi
 its result. It makes no live call and writes no file. The parent is not changed. `at_step` must
 be a `llm_call` or `tool_call` step, otherwise the core raises `InvalidForkPointError`.
 
-## Errors
+## Fork override shapes
+
+`override` takes any JSON value: `null`, `true` or `false`, finite numbers, strings, arrays, and
+objects with string keys. Values may nest.
+
+These are rejected with 400: `NaN`, `Infinity` and `-Infinity`, because they are not valid JSON.
+From Python, a value that is not plain JSON (a tuple, set, bytes or a custom object) raises
+`PayloadSerializationError`. A JSON request body cannot carry such a value.
+
+`use_override` is the only switch that applies an override. A request that sends `override`
+without `"use_override": true` fails with 400, and no child session is created.
+
+```json
+{"at_step": 7, "override": {"ok": true}, "use_override": true}
+{"at_step": 7, "override": null, "use_override": true}
+```
+
+The core redacts the override before it stores it. Values under the keys `api_key`, `password`,
+`token`, `secret`, `authorization`, `cookie`, `bearer` and `private_key` become `"[REDACTED]"` at
+any depth, and secrets written as `key=value` inside strings are masked. The `diff` returned by
+`fork` shows the stored value, so it can differ from the value that was sent.
+
+## Errors (Python)
 
 | Error | Raised when |
 |---|---|
 | `SessionNotFoundError` (core) | the session id is unknown |
 | `InvalidForkPointError` (core) | `at_step` is not a call step of the parent |
 | `ForkNotSupportedError` | `fork` is called without `use_override=True` |
+| `PayloadSerializationError` (core) | the override is not plain JSON, or is NaN or Infinity |
 | `DivergenceError` (core) | a replay makes a call that differs from the recording |
 | `AgentProtocolError` | stored session metadata is missing or incomplete |
+
+## HTTP routes
+
+The HTTP layer is in `src/revenant_dev/http.py`. Each route calls the function in the table above.
+Run it with `python -m revenant_dev.http`. It binds `127.0.0.1:8000` only, and CORS allows
+`http://localhost:5173` and `http://127.0.0.1:5173`.
+
+| Method | Path | Calls | Success | Other codes |
+|---|---|---|---|---|
+| GET | `/sessions` | `list_sessions` | 200 | none |
+| GET | `/sessions/{session_id}` | `get_session` | 200 | 404 |
+| GET | `/sessions/{session_id}/replay` | `replay_summary` | 200 | 404, 409 |
+| GET | `/sessions/{session_id}/bad-edit` | `find_bad_edit` | 200 | 404 |
+| POST | `/sessions/{session_id}/fork` | `fork` | 200 | 400, 404, 409, 422 |
+
+The fork body is `{"at_step": int, "override": any JSON value (default null), "use_override":
+bool (default false)}`.
+
+### Status codes
+
+| Code | Meaning | Cases | Test |
+|---|---|---|---|
+| 200 | success | every route | `test_list_sessions_endpoint_equals_the_function`, `test_get_session_endpoint_equals_the_function`, `test_replay_endpoint_equals_the_function`, `test_bad_edit_endpoint_equals_the_function`, `test_fork_endpoint_returns_a_child_with_the_functions_diff` |
+| 400 | fork refused | no `use_override`; `at_step` is not a call step; NaN or Infinity override | `test_fork_without_use_override_returns_400_not_500`, `test_fork_at_a_non_call_step_returns_400`, `test_non_finite_override_returns_400_and_creates_no_child` |
+| 404 | unknown session | any route | `test_unknown_session_returns_404_on_every_route` |
+| 409 | replay diverged from the recording | replay of a session whose first call differs | `test_divergence_maps_to_409_with_step_and_details` |
+| 409 | no agent metadata | replay or fork of a session recorded without the agent's metadata | `test_session_without_agent_metadata_maps_to_409_with_message` |
+| 422 | bad request body | fork body with a missing or mistyped field | `test_fork_body_without_at_step_returns_422` |
+| 500 | any other error (fallback) | none | no test |
+
+### Error bodies
+
+Most errors return `{"detail": "<message>"}`.
+
+A 409 divergence also returns the fields below. This is a shape, not captured output. `step` is the first call that differs. `expected`
+is what the recording holds at that step, `actual` is what the replay asked for, and `reason`
+names the mismatch, for example `arguments differ` or `different tool name`.
+
+```json
+{"detail": "divergence at step 1: arguments differ (...)", "step": 1, "expected": {...}, "actual": {...}, "reason": "arguments differ"}
+```
+
+A 422 comes from FastAPI and returns its standard list of field errors, `{"detail": [{"type",
+"loc", "msg", "input"}]}`.

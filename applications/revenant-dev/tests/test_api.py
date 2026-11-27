@@ -9,6 +9,7 @@ from revenant import (
     EventType,
     InvalidForkPointError,
     JSONValue,
+    PayloadSerializationError,
     Recorder,
     SessionNotFoundError,
     SQLiteTraceStore,
@@ -214,3 +215,13 @@ def test_every_output_is_plain_json(
     ]
     for output in outputs:
         assert canonical_json(output)
+
+
+def test_fork_rejects_a_non_finite_override_before_creating_a_child(
+    store: SQLiteTraceStore, base: RecordedRun
+) -> None:
+    step = _wrong_write_steps(store.load_session(base.session_id))[0]
+    before = len(store.list_sessions())
+    with pytest.raises(PayloadSerializationError):
+        fork(store, base.session_id, step, override=float("nan"), use_override=True)
+    assert len(store.list_sessions()) == before
