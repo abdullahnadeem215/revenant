@@ -1,0 +1,153 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #1d1d1f;
+  background: #f6f6f7;
+}
+
+body {
+  margin: 0;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: #1d1d1f;
+  color: #f6f6f7;
+}
+
+.app-header a {
+  color: #f6f6f7;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.subtitle {
+  opacity: 0.7;
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+a {
+  color: #0b5cad;
+}
+
+.status {
+  color: #555;
+}
+
+.status.error {
+  color: #a4161a;
+}
+
+.session-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.session-table th,
+.session-table td {
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid #e3e3e6;
+  text-align: left;
+}
+
+.session-table td:first-child {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+
+.session-id {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 1.1rem;
+  word-break: break-all;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1rem;
+}
+
+.facts dt {
+  font-weight: 600;
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.banner {
+  padding: 0.7rem 1rem;
+  border-radius: 6px;
+  background: #e8f5e9;
+}
+
+.banner.warn {
+  background: #fff4e5;
+  border-left: 4px solid #e8710a;
+}
+
+.timeline {
+  list-style: none;
+  margin: 1.2rem 0 0;
+  padding: 0;
+  border-left: 2px solid #c8c8cc;
+}
+
+.timeline-event {
+  display: flex;
+  gap: 0.9rem;
+  padding: 0.5rem 0.8rem 0.5rem 0;
+  margin-left: -1px;
+}
+
+.timeline-event.highlighted {
+  background: #fff4e5;
+  border-left: 4px solid #e8710a;
+  margin-left: -4px;
+  padding-left: 0.8rem;
+}
+
+.timeline-step {
+  min-width: 2.5rem;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: #555;
+}
+
+.timeline-body {
+  min-width: 0;
+}
+
+.timeline-head {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.timeline-type {
+  font-weight: 600;
+}
+
+.badge {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #e8710a;
+  color: #fff;
+}
+
+.timeline-summary {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.85rem;
+  color: #333;
+  word-break: break-word;
+}
